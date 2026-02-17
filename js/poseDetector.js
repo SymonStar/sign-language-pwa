@@ -85,6 +85,9 @@ class PoseDetector {
     }
 
     drawPose(results) {
+        // Clear canvas first
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
         if (!results.poseLandmarks) return;
 
         drawConnectors(this.ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
