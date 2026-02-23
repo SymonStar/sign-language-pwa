@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gesture Recorder</title>
+    <title>Advanced Gesture Recorder</title>
     <style>
         * {
             margin: 0;
@@ -43,6 +43,17 @@
             height: 100%;
             transform: scaleX(-1);
         }
+        .countdown {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 120px;
+            font-weight: bold;
+            color: #FFD700;
+            text-shadow: 0 0 20px rgba(255,215,0,0.8);
+            display: none;
+        }
         .status {
             position: absolute;
             top: 20px;
@@ -56,6 +67,11 @@
         }
         .recording {
             color: #ff0000;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
         .controls {
             padding: 20px;
@@ -85,8 +101,8 @@
             background: #4CAF50;
             color: white;
         }
-        .btn-record.recording {
-            background: #f44336;
+        .btn-record:disabled {
+            background: #666;
         }
         .btn-save {
             background: #2196F3;
@@ -106,8 +122,8 @@
             padding: 15px;
             border-radius: 5px;
             margin-top: 10px;
-            font-size: 12px;
-            max-height: 150px;
+            font-size: 11px;
+            max-height: 200px;
             overflow-y: auto;
         }
     </style>
@@ -117,16 +133,17 @@
         <div class="camera-container">
             <video id="webcam" autoplay playsinline></video>
             <canvas id="canvas"></canvas>
+            <div class="countdown" id="countdown">3</div>
             <div class="status" id="status">Ready to record</div>
         </div>
 
         <div class="controls">
             <input type="text" id="gestureName" class="gesture-input" placeholder="Enter gesture name (e.g., HELLO)" />
-            <button id="recordBtn" class="btn btn-record">Start Recording</button>
+            <button id="recordBtn" class="btn btn-record">Start Recording (3s countdown)</button>
             <button id="saveBtn" class="btn btn-save">Save Gesture</button>
             <button id="downloadBtn" class="btn btn-download">Download All Gestures</button>
-            <div class="info" id="info">Frames: 0 | Gestures saved: 0</div>
-            <div class="features" id="features"></div>
+            <div class="info" id="info">Frames: 0 | Gestures saved: 0 | Recording: 2.5 seconds</div>
+            <div class="features" id="features">Features will appear here after recording...</div>
         </div>
     </div>
 
@@ -134,6 +151,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
     
     <script>
         const video = document.getElementById('webcam');
@@ -142,20 +160,24 @@
         const status = document.getElementById('status');
         const info = document.getElementById('info');
         const features = document.getElementById('features');
+        const countdown = document.getElementById('countdown');
         const gestureNameInput = document.getElementById('gestureName');
         const recordBtn = document.getElementById('recordBtn');
         const saveBtn = document.getElementById('saveBtn');
         const downloadBtn = document.getElementById('downloadBtn');
 
-        let hands, pose;
+        let hands, pose, faceMesh;
         let isRecording = false;
         let recordedFrames = [];
         let allGestures = {};
         let currentHandsData = null;
         let currentPoseData = null;
+        let currentFaceData = null;
+
+        const COUNTDOWN_TIME = 3; // seconds
+        const RECORD_TIME = 2.5; // seconds
 
         async function init() {
-            // Initialize MediaPipe
             hands = new Hands({
                 locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
             });
@@ -177,7 +199,17 @@
             });
             pose.onResults(onPoseResults);
 
-            // Start camera
+            faceMesh = new FaceMesh({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+            });
+            faceMesh.setOptions({
+                maxNumFaces: 1,
+                refineLandmarks: false,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            faceMesh.onResults(onFaceResults);
+
             const stream = await navigator.mediaDevices.getUserMedia({ 
                 video: { facingMode: 'user' } 
             });
@@ -193,12 +225,12 @@
         async function processFrame() {
             await hands.send({ image: video });
             await pose.send({ image: video });
+            await faceMesh.send({ image: video });
             requestAnimationFrame(processFrame);
         }
 
         function onHandsResults(results) {
             currentHandsData = results;
-            drawHands(results);
         }
 
         function onPoseResults(results) {
@@ -206,10 +238,15 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawPose(results);
             if (currentHandsData) drawHands(currentHandsData);
+            if (currentFaceData) drawFace(currentFaceData);
             
             if (isRecording) {
                 captureFrame();
             }
+        }
+
+        function onFaceResults(results) {
+            currentFaceData = results;
         }
 
         function drawHands(results) {
@@ -228,12 +265,25 @@
             drawLandmarks(ctx, results.poseLandmarks, { color: '#00FF00', radius: 3 });
         }
 
+        function drawFace(results) {
+            if (!results.multiFaceLandmarks) return;
+            results.multiFaceLandmarks.forEach(landmarks => {
+                const keyPoints = [10, 152, 234, 454, 70, 300];
+                keyPoints.forEach(idx => {
+                    if (landmarks[idx]) {
+                        drawLandmarks(ctx, [landmarks[idx]], { color: '#FFFF00', radius: 2 });
+                    }
+                });
+            });
+        }
+
         function captureFrame() {
             const frame = {
                 timestamp: Date.now(),
                 pose_landmarks: null,
                 left_hand: null,
-                right_hand: null
+                right_hand: null,
+                face_landmarks: null
             };
 
             if (currentPoseData && currentPoseData.poseLandmarks) {
@@ -253,25 +303,67 @@
                 });
             }
 
+            if (currentFaceData && currentFaceData.multiFaceLandmarks) {
+                const faceLandmarks = currentFaceData.multiFaceLandmarks[0];
+                if (faceLandmarks) {
+                    const keyIndices = [10, 152, 234, 454, 70, 300];
+                    frame.face_landmarks = keyIndices.map(idx => [
+                        faceLandmarks[idx].x,
+                        faceLandmarks[idx].y,
+                        faceLandmarks[idx].z
+                    ]);
+                }
+            }
+
             recordedFrames.push(frame);
-            info.textContent = `Frames: ${recordedFrames.length} | Gestures saved: ${Object.keys(allGestures).length}`;
         }
 
-        recordBtn.addEventListener('click', () => {
-            isRecording = !isRecording;
+        recordBtn.addEventListener('click', async () => {
+            const gestureName = gestureNameInput.value.trim().toUpperCase();
             
-            if (isRecording) {
-                recordedFrames = [];
-                recordBtn.textContent = 'Stop Recording';
-                recordBtn.classList.add('recording');
-                status.textContent = 'RECORDING...';
-                status.classList.add('recording');
-            } else {
-                recordBtn.textContent = 'Start Recording';
-                recordBtn.classList.remove('recording');
-                status.textContent = `Recorded ${recordedFrames.length} frames`;
-                status.classList.remove('recording');
+            if (!gestureName) {
+                alert('Please enter a gesture name first!');
+                return;
             }
+
+            recordBtn.disabled = true;
+            recordedFrames = [];
+
+            // Countdown
+            countdown.style.display = 'block';
+            for (let i = COUNTDOWN_TIME; i > 0; i--) {
+                countdown.textContent = i;
+                status.textContent = `Get ready... ${i}`;
+                await sleep(1000);
+            }
+            countdown.textContent = 'GO!';
+            countdown.style.color = '#00FF00';
+
+            // Start recording
+            isRecording = true;
+            status.textContent = 'RECORDING...';
+            status.classList.add('recording');
+
+            // Record for set time
+            const startTime = Date.now();
+            const recordInterval = setInterval(() => {
+                const elapsed = (Date.now() - startTime) / 1000;
+                const remaining = RECORD_TIME - elapsed;
+                info.textContent = `Recording: ${remaining.toFixed(1)}s | Frames: ${recordedFrames.length}`;
+            }, 100);
+
+            await sleep(RECORD_TIME * 1000);
+
+            // Stop recording
+            isRecording = false;
+            clearInterval(recordInterval);
+            countdown.style.display = 'none';
+            countdown.style.color = '#FFD700';
+            status.textContent = `Recorded ${recordedFrames.length} frames`;
+            status.classList.remove('recording');
+            info.textContent = `Frames: ${recordedFrames.length} | Gestures saved: ${Object.keys(allGestures).length}`;
+            
+            recordBtn.disabled = false;
         });
 
         saveBtn.addEventListener('click', () => {
@@ -287,7 +379,7 @@
                 return;
             }
 
-            const calculatedFeatures = calculateFeatures(recordedFrames);
+            const calculatedFeatures = calculateAdvancedFeatures(recordedFrames);
             
             allGestures[gestureName] = {
                 description: `Recorded gesture: ${gestureName}`,
@@ -296,10 +388,10 @@
                 recorded_at: new Date().toISOString()
             };
 
-            features.innerHTML = `<strong>${gestureName}:</strong><br>${JSON.stringify(calculatedFeatures, null, 2)}`;
+            features.innerHTML = `<strong>${gestureName}:</strong><br><pre>${JSON.stringify(calculatedFeatures, null, 2)}</pre>`;
             
             status.textContent = `✅ Saved ${gestureName}!`;
-            info.textContent = `Frames: ${recordedFrames.length} | Gestures saved: ${Object.keys(allGestures).length}`;
+            info.textContent = `Frames: 0 | Gestures saved: ${Object.keys(allGestures).length}`;
             
             recordedFrames = [];
             gestureNameInput.value = '';
@@ -319,10 +411,10 @@
             a.download = 'recorded_gestures.json';
             a.click();
             
-            status.textContent = '✅ Downloaded gestures.json!';
+            status.textContent = `✅ Downloaded ${Object.keys(allGestures).length} gestures!`;
         });
 
-        function calculateFeatures(frames) {
+        function calculateAdvancedFeatures(frames) {
             const features = {
                 hand_movement: 0,
                 hand_shape: 'unknown',
@@ -330,57 +422,106 @@
                 two_hands: false,
                 hand_distance: 0,
                 movement_direction: null,
-                hand_velocity: 0
+                hand_velocity: 0,
+                hand_location: null,
+                palm_orientation: { left: [], right: [] },
+                finger_extension: [],
+                face_present: false,
+                hand_acceleration: 0
             };
 
             const leftPositions = [];
             const rightPositions = [];
             const handShapes = [];
+            const bodyLandmarks = [];
 
             frames.forEach(frame => {
+                if (frame.pose_landmarks) {
+                    bodyLandmarks.push(frame.pose_landmarks);
+                }
+
                 if (frame.left_hand) {
                     const center = getHandCenter(frame.left_hand);
                     leftPositions.push(center);
-                    handShapes.push(detectHandShape(frame.left_hand));
+                    handShapes.push(detectHandShapeDetailed(frame.left_hand));
+                    
+                    const orientation = calculatePalmOrientation(frame.left_hand);
+                    features.palm_orientation.left.push(orientation);
+                    
+                    const extension = calculateFingerExtension(frame.left_hand);
+                    features.finger_extension.push(extension);
                 }
+                
                 if (frame.right_hand) {
                     const center = getHandCenter(frame.right_hand);
                     rightPositions.push(center);
-                    handShapes.push(detectHandShape(frame.right_hand));
+                    handShapes.push(detectHandShapeDetailed(frame.right_hand));
+                    
+                    const orientation = calculatePalmOrientation(frame.right_hand);
+                    features.palm_orientation.right.push(orientation);
+                    
+                    const extension = calculateFingerExtension(frame.right_hand);
+                    features.finger_extension.push(extension);
+                }
+
+                if (frame.face_landmarks) {
+                    features.face_present = true;
                 }
             });
 
             const allPositions = [...leftPositions, ...rightPositions];
             
+            // Movement and velocity
             if (allPositions.length > 1) {
                 let totalMovement = 0;
+                const velocities = [];
                 for (let i = 1; i < allPositions.length; i++) {
                     const dist = distance(allPositions[i], allPositions[i-1]);
                     totalMovement += dist;
+                    velocities.push(dist);
                 }
-                features.hand_movement = Math.round(totalMovement * 1000) / 1000;
-                features.hand_velocity = Math.round((totalMovement / allPositions.length) * 1000) / 1000;
+                features.hand_movement = round(totalMovement);
+                features.hand_velocity = round(totalMovement / allPositions.length);
+                
+                // Acceleration
+                if (velocities.length > 1) {
+                    let totalAccel = 0;
+                    for (let i = 1; i < velocities.length; i++) {
+                        totalAccel += Math.abs(velocities[i] - velocities[i-1]);
+                    }
+                    features.hand_acceleration = round(totalAccel / velocities.length);
+                }
             }
 
+            // Height
             if (allPositions.length > 0) {
-                features.hand_height = Math.round((allPositions.reduce((sum, p) => sum + p[1], 0) / allPositions.length) * 1000) / 1000;
+                features.hand_height = round(allPositions.reduce((sum, p) => sum + p[1], 0) / allPositions.length);
             }
 
+            // Hand location relative to body
+            if (allPositions.length > 0 && bodyLandmarks.length > 0) {
+                features.hand_location = determineHandLocation(allPositions, bodyLandmarks);
+            }
+
+            // Two hands
             features.two_hands = leftPositions.length > 0 && rightPositions.length > 0;
 
+            // Hand distance
             if (leftPositions.length > 0 && rightPositions.length > 0) {
                 const minLen = Math.min(leftPositions.length, rightPositions.length);
                 let totalDist = 0;
                 for (let i = 0; i < minLen; i++) {
                     totalDist += distance(leftPositions[i], rightPositions[i]);
                 }
-                features.hand_distance = Math.round((totalDist / minLen) * 1000) / 1000;
+                features.hand_distance = round(totalDist / minLen);
             }
 
+            // Hand shape (most common)
             if (handShapes.length > 0) {
                 features.hand_shape = mode(handShapes);
             }
 
+            // Movement direction
             if (allPositions.length > 1) {
                 const start = allPositions[0];
                 const end = allPositions[allPositions.length - 1];
@@ -392,6 +533,32 @@
                 } else {
                     features.movement_direction = dy < 0 ? 'vertical_up' : 'vertical_down';
                 }
+            }
+
+            // Average palm orientations
+            if (features.palm_orientation.left.length > 0) {
+                features.palm_orientation.left = round(
+                    features.palm_orientation.left.reduce((a, b) => a + b, 0) / features.palm_orientation.left.length
+                );
+            } else {
+                features.palm_orientation.left = null;
+            }
+
+            if (features.palm_orientation.right.length > 0) {
+                features.palm_orientation.right = round(
+                    features.palm_orientation.right.reduce((a, b) => a + b, 0) / features.palm_orientation.right.length
+                );
+            } else {
+                features.palm_orientation.right = null;
+            }
+
+            // Average finger extension
+            if (features.finger_extension.length > 0) {
+                features.finger_extension = round(
+                    features.finger_extension.reduce((a, b) => a + b, 0) / features.finger_extension.length
+                );
+            } else {
+                features.finger_extension = 0;
             }
 
             return features;
@@ -407,32 +574,104 @@
             ];
         }
 
-        function detectHandShape(hand) {
-            const fingertips = [4, 8, 12, 16, 20];
+        function detectHandShapeDetailed(hand) {
+            const fingers = {
+                thumb: [4, 2],
+                index: [8, 5],
+                middle: [12, 9],
+                ring: [16, 13],
+                pinky: [20, 17]
+            };
+
+            const extended = [];
             const palmBase = hand[0];
-            let extended = 0;
 
-            fingertips.forEach(idx => {
-                const tip = hand[idx];
-                const dist = distance(tip.slice(0, 2), palmBase.slice(0, 2));
-                if (dist > 0.15) extended++;
-            });
+            for (const [name, [tipIdx, baseIdx]] of Object.entries(fingers)) {
+                const tip = hand[tipIdx];
+                const base = hand[baseIdx];
+                const tipDist = distance(tip.slice(0, 2), palmBase.slice(0, 2));
+                const baseDist = distance(base.slice(0, 2), palmBase.slice(0, 2));
+                
+                if (tipDist > baseDist * 1.2) {
+                    extended.push(name);
+                }
+            }
 
-            if (extended === 0) return 'fist';
-            if (extended === 5) return 'open';
-            if (extended === 1) return 'point';
-            if (extended === 2) return 'peace';
+            const numExtended = extended.length;
+
+            if (numExtended === 0) return 'fist';
+            if (numExtended === 5) return 'open';
+            if (numExtended === 1) {
+                if (extended.includes('index')) return 'point';
+                if (extended.includes('thumb')) return 'thumbs_up';
+            }
+            if (numExtended === 2) {
+                if (extended.includes('index') && extended.includes('middle')) return 'peace';
+                if (extended.includes('index') && extended.includes('thumb')) return 'L_shape';
+            }
+            if (numExtended === 3) return 'three';
+            
             return 'partial';
         }
 
+        function calculatePalmOrientation(hand) {
+            const wrist = hand[0];
+            const middleTip = hand[12];
+            const vector = [middleTip[0] - wrist[0], middleTip[1] - wrist[1]];
+            return Math.atan2(vector[1], vector[0]);
+        }
+
+        function calculateFingerExtension(hand) {
+            const fingertips = [4, 8, 12, 16, 20];
+            const palmBase = hand[0];
+            let totalExtension = 0;
+            
+            fingertips.forEach(idx => {
+                const tip = hand[idx];
+                totalExtension += distance(tip.slice(0, 2), palmBase.slice(0, 2));
+            });
+            
+            return totalExtension / 5;
+        }
+
+        function determineHandLocation(handPositions, bodyLandmarks) {
+            const avgHandY = handPositions.reduce((sum, p) => sum + p[1], 0) / handPositions.length;
+            const avgBody = bodyLandmarks[0];
+            
+            const nose = avgBody[0];
+            const leftShoulder = avgBody[11];
+            const rightShoulder = avgBody[12];
+            const leftHip = avgBody[23];
+            
+            const shoulderY = (leftShoulder[1] + rightShoulder[1]) / 2;
+            const hipY = leftHip[1];
+            
+            if (avgHandY < nose[1]) return 'above_head';
+            if (avgHandY < shoulderY) return 'head';
+            if (avgHandY < (shoulderY + hipY) / 2) return 'chest';
+            if (avgHandY < hipY) return 'waist';
+            return 'below_waist';
+        }
+
         function distance(p1, p2) {
-            return Math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2 + (p1[2] - p2[2]) ** 2);
+            const dx = p1[0] - p2[0];
+            const dy = p1[1] - p2[1];
+            const dz = (p1[2] || 0) - (p2[2] || 0);
+            return Math.sqrt(dx*dx + dy*dy + dz*dz);
         }
 
         function mode(arr) {
             return arr.sort((a,b) =>
                 arr.filter(v => v === a).length - arr.filter(v => v === b).length
             ).pop();
+        }
+
+        function round(num) {
+            return Math.round(num * 1000) / 1000;
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
         }
 
         init();
