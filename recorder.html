@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gesture Recorder</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background: #000;
+            color: #fff;
+        }
+        .container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .camera-container {
+            position: relative;
+            flex: 1;
+            overflow: hidden;
+        }
+        #webcam {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1);
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+        }
+        .status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .recording {
+            color: #ff0000;
+        }
+        .controls {
+            padding: 20px;
+            background: #111;
+        }
+        .gesture-input {
+            width: 100%;
+            padding: 15px;
+            font-size: 18px;
+            margin-bottom: 15px;
+            border: 2px solid #333;
+            background: #222;
+            color: #fff;
+            border-radius: 5px;
+        }
+        .btn {
+            width: 100%;
+            padding: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+        .btn-record {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-record.recording {
+            background: #f44336;
+        }
+        .btn-save {
+            background: #2196F3;
+            color: white;
+        }
+        .btn-download {
+            background: #FF9800;
+            color: white;
+        }
+        .info {
+            font-size: 14px;
+            color: #888;
+            margin-top: 10px;
+        }
+        .features {
+            background: #222;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-size: 12px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="camera-container">
+            <video id="webcam" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+            <div class="status" id="status">Ready to record</div>
+        </div>
+
+        <div class="controls">
+            <input type="text" id="gestureName" class="gesture-input" placeholder="Enter gesture name (e.g., HELLO)" />
+            <button id="recordBtn" class="btn btn-record">Start Recording</button>
+            <button id="saveBtn" class="btn btn-save">Save Gesture</button>
+            <button id="downloadBtn" class="btn btn-download">Download All Gestures</button>
+            <div class="info" id="info">Frames: 0 | Gestures saved: 0</div>
+            <div class="features" id="features"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const status = document.getElementById('status');
+        const info = document.getElementById('info');
+        const features = document.getElementById('features');
+        const gestureNameInput = document.getElementById('gestureName');
+        const recordBtn = document.getElementById('recordBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        let hands, pose;
+        let isRecording = false;
+        let recordedFrames = [];
+        let allGestures = {};
+        let currentHandsData = null;
+        let currentPoseData = null;
+
+        async function init() {
+            // Initialize MediaPipe
+            hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+            hands.setOptions({
+                maxNumHands: 2,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            hands.onResults(onHandsResults);
+
+            pose = new Pose({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+            });
+            pose.setOptions({
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            pose.onResults(onPoseResults);
+
+            // Start camera
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: 'user' } 
+            });
+            video.srcObject = stream;
+            
+            video.onloadedmetadata = () => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                processFrame();
+            };
+        }
+
+        async function processFrame() {
+            await hands.send({ image: video });
+            await pose.send({ image: video });
+            requestAnimationFrame(processFrame);
+        }
+
+        function onHandsResults(results) {
+            currentHandsData = results;
+            drawHands(results);
+        }
+
+        function onPoseResults(results) {
+            currentPoseData = results;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawPose(results);
+            if (currentHandsData) drawHands(currentHandsData);
+            
+            if (isRecording) {
+                captureFrame();
+            }
+        }
+
+        function drawHands(results) {
+            if (!results.multiHandLandmarks) return;
+            results.multiHandLandmarks.forEach((landmarks, index) => {
+                const handedness = results.multiHandedness[index].label;
+                const color = handedness === 'Left' ? '#FF0000' : '#0000FF';
+                drawConnectors(ctx, landmarks, HAND_CONNECTIONS, { color, lineWidth: 2 });
+                drawLandmarks(ctx, landmarks, { color, radius: 3 });
+            });
+        }
+
+        function drawPose(results) {
+            if (!results.poseLandmarks) return;
+            drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+            drawLandmarks(ctx, results.poseLandmarks, { color: '#00FF00', radius: 3 });
+        }
+
+        function captureFrame() {
+            const frame = {
+                timestamp: Date.now(),
+                pose_landmarks: null,
+                left_hand: null,
+                right_hand: null
+            };
+
+            if (currentPoseData && currentPoseData.poseLandmarks) {
+                frame.pose_landmarks = currentPoseData.poseLandmarks.map(lm => [lm.x, lm.y, lm.z]);
+            }
+
+            if (currentHandsData && currentHandsData.multiHandLandmarks) {
+                currentHandsData.multiHandLandmarks.forEach((landmarks, index) => {
+                    const handedness = currentHandsData.multiHandedness[index].label;
+                    const handData = landmarks.map(lm => [lm.x, lm.y, lm.z]);
+                    
+                    if (handedness === 'Left') {
+                        frame.left_hand = handData;
+                    } else {
+                        frame.right_hand = handData;
+                    }
+                });
+            }
+
+            recordedFrames.push(frame);
+            info.textContent = `Frames: ${recordedFrames.length} | Gestures saved: ${Object.keys(allGestures).length}`;
+        }
+
+        recordBtn.addEventListener('click', () => {
+            isRecording = !isRecording;
+            
+            if (isRecording) {
+                recordedFrames = [];
+                recordBtn.textContent = 'Stop Recording';
+                recordBtn.classList.add('recording');
+                status.textContent = 'RECORDING...';
+                status.classList.add('recording');
+            } else {
+                recordBtn.textContent = 'Start Recording';
+                recordBtn.classList.remove('recording');
+                status.textContent = `Recorded ${recordedFrames.length} frames`;
+                status.classList.remove('recording');
+            }
+        });
+
+        saveBtn.addEventListener('click', () => {
+            const gestureName = gestureNameInput.value.trim().toUpperCase();
+            
+            if (!gestureName) {
+                alert('Please enter a gesture name!');
+                return;
+            }
+            
+            if (recordedFrames.length === 0) {
+                alert('No frames recorded!');
+                return;
+            }
+
+            const calculatedFeatures = calculateFeatures(recordedFrames);
+            
+            allGestures[gestureName] = {
+                description: `Recorded gesture: ${gestureName}`,
+                features: calculatedFeatures,
+                frame_count: recordedFrames.length,
+                recorded_at: new Date().toISOString()
+            };
+
+            features.innerHTML = `<strong>${gestureName}:</strong><br>${JSON.stringify(calculatedFeatures, null, 2)}`;
+            
+            status.textContent = `✅ Saved ${gestureName}!`;
+            info.textContent = `Frames: ${recordedFrames.length} | Gestures saved: ${Object.keys(allGestures).length}`;
+            
+            recordedFrames = [];
+            gestureNameInput.value = '';
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            if (Object.keys(allGestures).length === 0) {
+                alert('No gestures to download!');
+                return;
+            }
+
+            const dataStr = JSON.stringify(allGestures, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'recorded_gestures.json';
+            a.click();
+            
+            status.textContent = '✅ Downloaded gestures.json!';
+        });
+
+        function calculateFeatures(frames) {
+            const features = {
+                hand_movement: 0,
+                hand_shape: 'unknown',
+                hand_height: 0,
+                two_hands: false,
+                hand_distance: 0,
+                movement_direction: null,
+                hand_velocity: 0
+            };
+
+            const leftPositions = [];
+            const rightPositions = [];
+            const handShapes = [];
+
+            frames.forEach(frame => {
+                if (frame.left_hand) {
+                    const center = getHandCenter(frame.left_hand);
+                    leftPositions.push(center);
+                    handShapes.push(detectHandShape(frame.left_hand));
+                }
+                if (frame.right_hand) {
+                    const center = getHandCenter(frame.right_hand);
+                    rightPositions.push(center);
+                    handShapes.push(detectHandShape(frame.right_hand));
+                }
+            });
+
+            const allPositions = [...leftPositions, ...rightPositions];
+            
+            if (allPositions.length > 1) {
+                let totalMovement = 0;
+                for (let i = 1; i < allPositions.length; i++) {
+                    const dist = distance(allPositions[i], allPositions[i-1]);
+                    totalMovement += dist;
+                }
+                features.hand_movement = Math.round(totalMovement * 1000) / 1000;
+                features.hand_velocity = Math.round((totalMovement / allPositions.length) * 1000) / 1000;
+            }
+
+            if (allPositions.length > 0) {
+                features.hand_height = Math.round((allPositions.reduce((sum, p) => sum + p[1], 0) / allPositions.length) * 1000) / 1000;
+            }
+
+            features.two_hands = leftPositions.length > 0 && rightPositions.length > 0;
+
+            if (leftPositions.length > 0 && rightPositions.length > 0) {
+                const minLen = Math.min(leftPositions.length, rightPositions.length);
+                let totalDist = 0;
+                for (let i = 0; i < minLen; i++) {
+                    totalDist += distance(leftPositions[i], rightPositions[i]);
+                }
+                features.hand_distance = Math.round((totalDist / minLen) * 1000) / 1000;
+            }
+
+            if (handShapes.length > 0) {
+                features.hand_shape = mode(handShapes);
+            }
+
+            if (allPositions.length > 1) {
+                const start = allPositions[0];
+                const end = allPositions[allPositions.length - 1];
+                const dx = end[0] - start[0];
+                const dy = end[1] - start[1];
+                
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    features.movement_direction = dx > 0 ? 'horizontal' : 'horizontal_left';
+                } else {
+                    features.movement_direction = dy < 0 ? 'vertical_up' : 'vertical_down';
+                }
+            }
+
+            return features;
+        }
+
+        function getHandCenter(hand) {
+            const wrist = hand[0];
+            const middleBase = hand[9];
+            return [
+                (wrist[0] + middleBase[0]) / 2,
+                (wrist[1] + middleBase[1]) / 2,
+                (wrist[2] + middleBase[2]) / 2
+            ];
+        }
+
+        function detectHandShape(hand) {
+            const fingertips = [4, 8, 12, 16, 20];
+            const palmBase = hand[0];
+            let extended = 0;
+
+            fingertips.forEach(idx => {
+                const tip = hand[idx];
+                const dist = distance(tip.slice(0, 2), palmBase.slice(0, 2));
+                if (dist > 0.15) extended++;
+            });
+
+            if (extended === 0) return 'fist';
+            if (extended === 5) return 'open';
+            if (extended === 1) return 'point';
+            if (extended === 2) return 'peace';
+            return 'partial';
+        }
+
+        function distance(p1, p2) {
+            return Math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2 + (p1[2] - p2[2]) ** 2);
+        }
+
+        function mode(arr) {
+            return arr.sort((a,b) =>
+                arr.filter(v => v === a).length - arr.filter(v => v === b).length
+            ).pop();
+        }
+
+        init();
+    </script>
+</body>
+</html>
