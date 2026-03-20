@@ -89,8 +89,11 @@ class App {
             
             const result = await this.apiClient.translate(frames);
             
-            this.elements.translation.textContent = result.translation;
-            this.elements.words.textContent = `Recognized: ${result.words.join(', ')}`;
+            // Only update if we got a meaningful result (not HELLO default)
+            if (result.words && result.words.length > 0 && result.words[0] !== 'HELLO') {
+                this.elements.translation.textContent = result.translation;
+                this.elements.words.textContent = `Recognized: ${result.words.join(', ')}`;
+            }
             
             this.updateStatus('Active - Start signing!', 'active');
             

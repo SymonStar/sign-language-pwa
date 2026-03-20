@@ -9,11 +9,14 @@ body {
     background: #000;
     color: #fff;
     overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
 }
 
 .container {
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
     display: flex;
     flex-direction: column;
 }
@@ -78,6 +81,7 @@ body {
 
 .controls {
     padding: 15px;
+    padding-bottom: max(15px, env(safe-area-inset-bottom));
     background: #111;
     display: flex;
     gap: 10px;
