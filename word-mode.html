@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#000000">
+    <title>Sign Language Translator - Word Mode</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/word-mode.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Mode Toggle -->
+        <div class="mode-toggle">
+            <a href="index.html" class="mode-link">Continuous Mode</a>
+            <span class="mode-link active">Word-by-Word Mode</span>
+        </div>
+
+        <!-- Camera View -->
+        <div class="camera-container">
+            <video id="webcam" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+            <div class="countdown" id="countdown"></div>
+        </div>
+
+        <!-- Current Word Display -->
+        <div class="word-display">
+            <div class="status" id="status">Ready to start</div>
+            <div class="current-word" id="currentWord">-</div>
+            <div class="confidence" id="confidence"></div>
+        </div>
+
+        <!-- Sentence Builder -->
+        <div class="sentence-builder">
+            <h3>Your Sentence:</h3>
+            <div class="word-chips" id="wordChips">
+                <span class="empty-state">No words yet. Start signing!</span>
+            </div>
+            <div class="translation-result" id="translationResult"></div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls">
+            <button id="startBtn" class="btn btn-primary">Start Camera</button>
+            <button id="captureBtn" class="btn btn-success" style="display:none;">Capture Sign</button>
+            <button id="addWordBtn" class="btn btn-info" style="display:none;">Add to Sentence</button>
+            <button id="translateBtn" class="btn btn-warning" style="display:none;">Translate Sentence</button>
+            <button id="clearBtn" class="btn btn-secondary" style="display:none;">Clear All</button>
+            <button id="stopBtn" class="btn btn-danger" style="display:none;">Stop Camera</button>
+        </div>
+    </div>
+
+    <!-- MediaPipe -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+    
+    <!-- App Scripts -->
+    <script src="js/config.js"></script>
+    <script src="js/poseDetector.js"></script>
+    <script src="js/apiClient.js"></script>
+    <script src="js/word-mode.js"></script>
+</body>
+</html>
