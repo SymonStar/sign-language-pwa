@@ -26,6 +26,7 @@ body {
     flex: 1;
     overflow: hidden;
     background: #000;
+    min-height: 60vh; /* Ensure camera takes up most of screen */
 }
 
 #webcam {
