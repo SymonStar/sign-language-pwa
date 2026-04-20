@@ -102,13 +102,20 @@ class WordModeApp {
         // Countdown
         await this.showCountdown();
         
-        // Capture for 2 seconds (60 frames at 30fps)
+        // Capture for 2 seconds
         this.updateStatus('Signing... Hold your gesture!');
         this.elements.currentWord.textContent = '📹 Recording...';
         this.elements.confidence.textContent = '';
         
-        // Wait for frames to accumulate
+        // Actively capture frames for 2 seconds
+        const captureInterval = setInterval(() => {
+            if (this.poseDetector && this.poseDetector.lastFrame) {
+                this.captureFrames.push(this.poseDetector.lastFrame);
+            }
+        }, 33); // ~30fps
+        
         await new Promise(resolve => setTimeout(resolve, 2000));
+        clearInterval(captureInterval);
         
         // Stop capturing
         this.updateStatus('Processing...');
@@ -132,10 +139,7 @@ class WordModeApp {
     }
 
     onFrameCapture(frames) {
-        // Store frames during capture
-        if (this.isCapturing) {
-            this.captureFrames.push(...frames);
-        }
+        // Not used in word mode - we capture directly from poseDetector.lastFrame
     }
 
     async recognizeGesture() {

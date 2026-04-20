@@ -8,6 +8,7 @@ class PoseDetector {
         this.faceMesh = null;
         this.isInitialized = false;
         this.frameBuffer = [];
+        this.lastFrame = null; // Store last captured frame for word-mode
         this.onFrameCallback = null;
         this.currentHandsData = null;
         this.currentPoseData = null;
@@ -179,6 +180,7 @@ class PoseDetector {
         }
 
         this.frameBuffer.push(skeletalData);
+        this.lastFrame = skeletalData; // Always store last frame
 
         if (this.frameBuffer.length >= CONFIG.FRAME_BATCH_SIZE) {
             if (this.onFrameCallback) {
