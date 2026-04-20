@@ -220,6 +220,10 @@
 
 /* Mobile Responsive */
 @media (max-width: 768px) {
+    .camera-container {
+        height: 300px;
+    }
+
     .current-word {
         font-size: 36px;
     }
@@ -230,11 +234,20 @@
     }
 
     .controls .btn {
-        min-width: 120px;
+        min-width: 100px;
         font-size: 14px;
+        padding: 10px 15px;
     }
 
     .countdown {
         font-size: 80px;
+    }
+
+    .word-display {
+        padding: 20px;
+    }
+
+    .sentence-builder {
+        padding: 15px;
     }
 }

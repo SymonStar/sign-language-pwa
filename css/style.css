@@ -8,25 +8,26 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: #000;
     color: #fff;
-    overflow: hidden;
-    position: fixed;
-    width: 100%;
-    height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    min-height: 100vh;
 }
 
 .container {
     width: 100%;
-    height: 100%;
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
+    padding-bottom: 20px;
 }
 
 .camera-container {
     position: relative;
-    flex: 1;
+    width: 100%;
+    height: 400px;
     overflow: hidden;
     background: #000;
-    min-height: 60vh; /* Ensure camera takes up most of screen */
+    margin-bottom: 20px;
 }
 
 #webcam {
