@@ -221,7 +221,7 @@
 /* Mobile Responsive */
 @media (max-width: 768px) {
     .camera-container {
-        height: 300px;
+        height: 50vh;
     }
 
     .current-word {
